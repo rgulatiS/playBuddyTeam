@@ -23,6 +23,12 @@ public class AvailabilityController {
         return ResponseEntity.ok(created);
     }
 
+    @PostMapping("/create")
+    public ResponseEntity<AvailabilityDto> createAlias(@RequestBody AvailabilityDto dto) {
+        AvailabilityDto created = availabilityService.create(dto);
+        return ResponseEntity.ok(created);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<AvailabilityDto> getById(@PathVariable Long id) {
         AvailabilityDto dto = availabilityService.getById(id);
@@ -48,4 +54,3 @@ public class AvailabilityController {
         return ResponseEntity.noContent().build();
     }
 }
-

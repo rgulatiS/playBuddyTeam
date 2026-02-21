@@ -51,4 +51,9 @@ public class Booking extends AuditModel {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status")
     private PaymentStatus paymentStatus;
+
+    // Provider payment id (e.g., Stripe PaymentIntent id)
+    @Column(name = "payment_provider_id")
+    private String paymentProviderId;
+
 }
