@@ -1,5 +1,7 @@
 package pro.play.user.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,19 +15,23 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Tag(name = "Users", description = "Query and manage platform users")
 public class UserController {
 
     private final UserRepository userRepository;
 
+    @Operation(summary = "List all users")
     @GetMapping
     public ResponseEntity<List<UserDto>> list() {
         List<UserDto> dtos = userRepository.findAll().stream().map(this::toDto).collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
     }
 
+    @Operation(summary = "Get a single user by ID")
     @GetMapping("/{id}")
     public ResponseEntity<UserDto> getById(@PathVariable Long id) {
-        return userRepository.findById(id).map(u -> ResponseEntity.ok(toDto(u))).orElseGet(() -> ResponseEntity.notFound().build());
+        return userRepository.findById(id).map(u -> ResponseEntity.ok(toDto(u)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     private UserDto toDto(User u) {
@@ -39,4 +45,3 @@ public class UserController {
                 .build();
     }
 }
-

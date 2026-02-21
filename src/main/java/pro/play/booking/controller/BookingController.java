@@ -1,5 +1,7 @@
 package pro.play.booking.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -20,17 +22,20 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
+@Tag(name = "Bookings", description = "Create, list and cancel bookings; walk-in support")
 public class BookingController {
 
     private final BookingRepository bookingRepository;
     private final BookingService bookingService;
     private final UserRepository userRepository;
 
+    @Operation(summary = "List all bookings")
     @GetMapping
     public ResponseEntity<List<Booking>> list() {
         return ResponseEntity.ok(bookingRepository.findAll());
     }
 
+    @Operation(summary = "Create a raw booking (quick save, no availability check)")
     @PostMapping
     public ResponseEntity<Booking> create(@RequestBody Booking b) {
         // NOTE: real implementation should check availability and create payment
@@ -38,12 +43,14 @@ public class BookingController {
         return ResponseEntity.ok(bookingRepository.save(b));
     }
 
+    @Operation(summary = "Create a booking with full availability & payment flow")
     @PostMapping("/create")
     public ResponseEntity<BookingResponse> create(@Valid @RequestBody BookingRequest req) {
         BookingResponse resp = bookingService.createBooking(req);
         return ResponseEntity.ok(resp);
     }
 
+    @Operation(summary = "Create a walk-in booking (auto-creates customer if not found)")
     @PostMapping("/walkin")
     public ResponseEntity<BookingResponse> walkIn(@Valid @RequestBody WalkInRequest req) {
         // find or create user by mobile or email
@@ -78,10 +85,12 @@ public class BookingController {
         return ResponseEntity.ok(resp);
     }
 
+    @Operation(summary = "Cancel a booking")
     @DeleteMapping("/cancel")
     public ResponseEntity<Void> cancel(@Valid @RequestBody CancelRequest req) {
         boolean ok = bookingService.cancelBooking(req.getBookingId(), req.getUserId());
-        if (ok) return ResponseEntity.noContent().build();
+        if (ok)
+            return ResponseEntity.noContent().build();
         return ResponseEntity.status(403).build();
     }
 }

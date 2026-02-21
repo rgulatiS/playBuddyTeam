@@ -1,5 +1,7 @@
 package pro.play.payment.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,15 +13,18 @@ import pro.play.payment.service.PaymentService;
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
+@Tag(name = "Payments", description = "Initiate and track booking payments")
 public class PaymentController {
 
     private final PaymentService paymentService;
     private final BookingRepository bookingRepository;
 
+    @Operation(summary = "Create a payment for a booking (sandbox mode)")
     @PostMapping
     public ResponseEntity<PaymentResult> createPayment(@RequestParam Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId).orElse(null);
-        if (booking == null) return ResponseEntity.notFound().build();
+        if (booking == null)
+            return ResponseEntity.notFound().build();
         PaymentResult result = paymentService.createPayment(booking);
         if (result != null && result.getProviderId() != null) {
             booking.setPaymentProviderId(result.getProviderId());
