@@ -23,7 +23,6 @@ import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.Optional;
 import java.util.Random;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -62,16 +61,17 @@ public class AuthServiceImpl implements AuthService {
         String access = jwtUtil.generateAccessToken(u.getEmail());
         String refresh = jwtUtil.generateRefreshToken(u.getEmail());
         storeRefreshToken(u, refresh);
-        return new TokenResponse(access, refresh);
+        return new TokenResponse(access, refresh, u.getId(), u.getName(), u.getEmail());
     }
 
     @Override
     @Transactional
     public OtpSentResponse registerByMobile(MobileRegisterRequest req) {
-        // Send OTP to mobile for registration (user created on verify)
+        // Send OTP to email for registration (dual identity collected)
         String code = generateOtp();
         OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(otpExpiryMinutes);
         OtpCode otp = OtpCode.builder()
+                .email(req.getEmail())
                 .mobileNumber(req.getMobileNumber())
                 .code(code)
                 .expiresAt(expiresAt)
@@ -79,19 +79,24 @@ public class AuthServiceImpl implements AuthService {
                 .used(false)
                 .build();
         otpCodeRepository.save(otp);
-        // In production, send SMS here. Return debug code for dev.
+        // In development, we return the code for verification.
+        // In production, send Email here.
         return new OtpSentResponse(true, code);
     }
 
     @Override
     @Transactional
     public TokenResponse verifyOtp(VerifyOtpRequest req) {
-        Optional<OtpCode> maybe = otpCodeRepository.findTopByMobileNumberOrderByIdDesc(req.getMobileNumber());
-        if (maybe.isEmpty()) throw new IllegalArgumentException("No OTP sent to this number");
+        Optional<OtpCode> maybe = otpCodeRepository.findTopByEmailOrderByIdDesc(req.getEmail());
+        if (maybe.isEmpty())
+            throw new IllegalArgumentException("No OTP sent to this email");
         OtpCode otp = maybe.get();
-        if (otp.isUsed()) throw new IllegalArgumentException("OTP already used");
-        if (otp.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) throw new IllegalArgumentException("OTP expired");
-        if (otp.getAttemptsLeft() == null || otp.getAttemptsLeft() <= 0) throw new IllegalArgumentException("No attempts left");
+        if (otp.isUsed())
+            throw new IllegalArgumentException("OTP already used");
+        if (otp.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC)))
+            throw new IllegalArgumentException("OTP expired");
+        if (otp.getAttemptsLeft() == null || otp.getAttemptsLeft() <= 0)
+            throw new IllegalArgumentException("No attempts left");
         if (!otp.getCode().equals(req.getCode())) {
             otp.setAttemptsLeft(otp.getAttemptsLeft() - 1);
             otpCodeRepository.save(otp);
@@ -100,32 +105,51 @@ public class AuthServiceImpl implements AuthService {
         otp.setUsed(true);
         otpCodeRepository.save(otp);
 
-        // ensure user exists, create if not
-        User user = userRepository.findByMobileNumber(req.getMobileNumber()).orElseGet(() -> {
-            User u = User.builder()
-                    .mobileNumber(req.getMobileNumber())
-                    .role(Role.USER)
-                    .build();
-            return userRepository.save(u);
-        });
+        // Find or create user, and ensure profile is complete/updated
+        User user = userRepository.findByEmail(req.getEmail())
+                .orElseGet(() -> User.builder().email(req.getEmail()).role(Role.USER).build());
 
-        String subject = user.getEmail() != null ? user.getEmail() : user.getMobileNumber();
-        String access = jwtUtil.generateAccessToken(subject);
-        String refresh = jwtUtil.generateRefreshToken(subject);
+        // For new users, name and password are required
+        boolean isNewUser = user.getId() == null;
+
+        if (req.getName() != null && !req.getName().trim().isEmpty()) {
+            user.setName(req.getName());
+        } else if (isNewUser) {
+            throw new IllegalArgumentException("Name is required for registration");
+        }
+
+        if (req.getMobileNumber() != null && !req.getMobileNumber().trim().isEmpty()) {
+            user.setMobileNumber(req.getMobileNumber());
+        } else if (user.getMobileNumber() == null) {
+            user.setMobileNumber(otp.getMobileNumber());
+        }
+
+        if (req.getPassword() != null && !req.getPassword().trim().isEmpty()) {
+            user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+        } else if (isNewUser || user.getPasswordHash() == null) {
+            throw new IllegalArgumentException("Password is required for registration");
+        }
+
+        userRepository.save(user);
+
+        String access = jwtUtil.generateAccessToken(user.getEmail());
+        String refresh = jwtUtil.generateRefreshToken(user.getEmail());
         storeRefreshToken(user, refresh);
-        return new TokenResponse(access, refresh);
+        return new TokenResponse(access, refresh, user.getId(), user.getName(), user.getEmail());
     }
 
     @Override
     @Transactional
     public TokenResponse loginByEmail(AuthRequest req) {
         // authenticate
-        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword()));
-        User user = userRepository.findByEmail(req.getUsername()).orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+        authenticationManager
+                .authenticate(new UsernamePasswordAuthenticationToken(req.getUsername(), req.getPassword()));
+        User user = userRepository.findByEmail(req.getUsername())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
         String access = jwtUtil.generateAccessToken(user.getEmail());
         String refresh = jwtUtil.generateRefreshToken(user.getEmail());
         storeRefreshToken(user, refresh);
-        return new TokenResponse(access, refresh);
+        return new TokenResponse(access, refresh, user.getId(), user.getName(), user.getEmail());
     }
 
     @Override
@@ -156,16 +180,20 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalArgumentException("Invalid refresh token");
         }
         Optional<RefreshToken> maybe = refreshTokenRepository.findByToken(token);
-        if (maybe.isEmpty()) throw new IllegalArgumentException("Refresh token not found");
+        if (maybe.isEmpty())
+            throw new IllegalArgumentException("Refresh token not found");
         RefreshToken entity = maybe.get();
-        if (entity.isRevoked()) throw new IllegalArgumentException("Refresh token revoked");
+        if (entity.isRevoked())
+            throw new IllegalArgumentException("Refresh token revoked");
         if (entity.getExpiresAt() != null && entity.getExpiresAt().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             throw new IllegalArgumentException("Refresh token expired");
         }
         // issue new tokens and revoke old
         String subject = jwtUtil.getSubject(token);
         // find user by subject
-        Optional<User> maybeUser = userRepository.findByEmail(subject).isEmpty() ? userRepository.findByMobileNumber(subject) : userRepository.findByEmail(subject);
+        Optional<User> maybeUser = userRepository.findByEmail(subject).isEmpty()
+                ? userRepository.findByMobileNumber(subject)
+                : userRepository.findByEmail(subject);
         User user = maybeUser.orElseThrow(() -> new IllegalArgumentException("User not found for refresh token"));
 
         entity.setRevoked(true);
@@ -174,7 +202,7 @@ public class AuthServiceImpl implements AuthService {
         String newAccess = jwtUtil.generateAccessToken(subject);
         String newRefresh = jwtUtil.generateRefreshToken(subject);
         storeRefreshToken(user, newRefresh);
-        return new TokenResponse(newAccess, newRefresh);
+        return new TokenResponse(newAccess, newRefresh, user.getId(), user.getName(), user.getEmail());
     }
 
     private void storeRefreshToken(User user, String token) {
@@ -191,7 +219,7 @@ public class AuthServiceImpl implements AuthService {
 
     private String generateOtp() {
         int bound = (int) Math.pow(10, otpLength);
-        int val = random.nextInt(bound - (bound/10)) + (bound/10); // ensure leading digit not zero
+        int val = random.nextInt(bound - (bound / 10)) + (bound / 10); // ensure leading digit not zero
         return String.valueOf(val);
     }
 }

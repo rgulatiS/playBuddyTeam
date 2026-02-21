@@ -1,26 +1,27 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+import LoginScreen from './screens/LoginScreen';
+import RegisterScreen from './screens/RegisterScreen';
+import SearchCourtsScreen from './screens/SearchCourtsScreen';
+import CourtBookingScreen from './screens/CourtBookingScreen';
+import BookingHistoryScreen from './screens/BookingHistoryScreen';
+
+const Stack = createNativeStackNavigator();
 
 const App = () => {
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Welcome to PlayBuddy!</Text>
-    </View>
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Login">
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
+        <Stack.Screen name="SearchCourts" component={SearchCourtsScreen} options={{ title: 'Search Courts' }} />
+        <Stack.Screen name="CourtBooking" component={CourtBookingScreen} options={{ title: 'Book Court' }} />
+        <Stack.Screen name="BookingHistory" component={BookingHistoryScreen} options={{ title: 'My Bookings' }} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  text: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-});
 
 export default App;

@@ -29,9 +29,12 @@ public class BookingController {
     private final BookingService bookingService;
     private final UserRepository userRepository;
 
-    @Operation(summary = "List all bookings")
+    @Operation(summary = "List all bookings (optional filter by userId)")
     @GetMapping
-    public ResponseEntity<List<Booking>> list() {
+    public ResponseEntity<List<Booking>> list(@RequestParam(required = false) Long userId) {
+        if (userId != null) {
+            return ResponseEntity.ok(bookingRepository.findByUserIdOrderByIdDesc(userId));
+        }
         return ResponseEntity.ok(bookingRepository.findAll());
     }
 

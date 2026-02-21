@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
-import EncryptedStorage from 'react-native-encrypted-storage';
 import axios from 'axios';
 
 const LoginScreen = ({ navigation }) => {
@@ -9,13 +8,19 @@ const LoginScreen = ({ navigation }) => {
 
   const login = async () => {
     try {
-      const response = await axios.post('https://api.example.com/auth/login', { email, password });
-      if (response.data.token) {
-        await EncryptedStorage.setItem('jwt_token', response.data.token);
+      // Pointing to local backend
+      const response = await axios.post('http://localhost:8080/api/auth/login/email', { username: email, password });
+      if (response.data.accessToken) {
+        // Use localStorage for web compatibility
+        localStorage.setItem('jwt_token', response.data.accessToken);
+        localStorage.setItem('user_id', response.data.userId);
+        localStorage.setItem('user_name', response.data.userName);
+        localStorage.setItem('user_email', response.data.userEmail);
         Alert.alert('Success', 'Login successful');
         navigation.navigate('SearchCourts');
       }
     } catch (error) {
+      console.error(error);
       Alert.alert('Error', 'Invalid email or password');
     }
   };
@@ -39,6 +44,9 @@ const LoginScreen = ({ navigation }) => {
         secureTextEntry
       />
       <Button title="Login" onPress={login} />
+      <View style={{ marginTop: 16 }}>
+        <Button title="Don't have an account? Register" onPress={() => navigation.navigate('Register')} color="#666" />
+      </View>
     </View>
   );
 };

@@ -18,7 +18,10 @@ public class OtpCode extends AuditModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "mobile_number", nullable = false)
+    @Column(name = "email", nullable = false)
+    private String email;
+
+    @Column(name = "mobile_number")
     private String mobileNumber;
 
     @Column(nullable = false)
@@ -33,4 +36,3 @@ public class OtpCode extends AuditModel {
     @Column(name = "used")
     private boolean used;
 }
-

@@ -7,6 +7,7 @@ import lombok.Data;
 public class MobileRegisterRequest {
     @NotBlank
     private String mobileNumber;
+    @NotBlank
+    private String email;
     private String name;
 }
-

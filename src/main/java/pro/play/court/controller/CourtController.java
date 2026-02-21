@@ -3,17 +3,13 @@ package pro.play.court.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import pro.play.availability.repository.AvailabilityRepository;
 import pro.play.availability.repository.AvailabilityRuleRepository;
 import pro.play.court.model.Court;
 import pro.play.court.repository.CourtRepository;
 
-import java.time.LocalDate;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/courts")
@@ -22,8 +18,8 @@ import java.util.stream.Collectors;
 public class CourtController {
 
     private final CourtRepository courtRepository;
-    private final AvailabilityRepository availabilityRepository;
     private final AvailabilityRuleRepository availabilityRuleRepository;
+    private final pro.play.booking.repository.BookingRepository bookingRepository;
 
     @Operation(summary = "List all courts")
     @GetMapping
@@ -49,18 +45,52 @@ public class CourtController {
         return ResponseEntity.ok(courtRepository.findByVenueId(venueId));
     }
 
-    @Operation(summary = "Find courts available for a given sport and date")
+    @Operation(summary = "Find courts available for a given sport and date with slots")
     @GetMapping("/available")
-    public ResponseEntity<List<Court>> available(
-            @RequestParam Long sportId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        List<Court> courts = courtRepository.findBySportId(sportId);
-        List<Court> available = courts.stream().filter(c -> {
-            boolean hasSlot = !availabilityRepository.findByCourtIdAndDate(c.getId(), date).isEmpty();
-            boolean hasRule = !availabilityRuleRepository.findByCourtIdAndDayOfWeek(c.getId(), date.getDayOfWeek())
-                    .isEmpty();
-            return hasSlot || hasRule;
-        }).collect(Collectors.toList());
-        return ResponseEntity.ok(available);
+    public ResponseEntity<List<pro.play.court.dto.CourtResponse>> available(
+            @RequestParam(required = false) Long sportId,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
+
+        if (sportId == null || date == null) {
+            return ResponseEntity.ok(java.util.List.of());
+        }
+
+        java.util.List<Court> courts = courtRepository.findBySportId(sportId);
+        java.util.List<pro.play.court.dto.CourtResponse> responses = new java.util.ArrayList<>();
+
+        for (Court court : courts) {
+            java.util.List<pro.play.availability.model.AvailabilityRule> rules = availabilityRuleRepository
+                    .findByCourtIdAndDayOfWeek(court.getId(), date.getDayOfWeek());
+
+            java.util.List<String> availableSlots = new java.util.ArrayList<>();
+
+            for (pro.play.availability.model.AvailabilityRule rule : rules) {
+                java.time.LocalTime start = rule.getStartTime();
+                java.time.LocalTime end = rule.getEndTime();
+                int duration = rule.getSlotDurationMinutes() != null ? rule.getSlotDurationMinutes() : 60;
+
+                while (start.plusMinutes(duration).isBefore(end) || start.plusMinutes(duration).equals(end)) {
+                    java.time.LocalTime slotEnd = start.plusMinutes(duration);
+
+                    // Check if slot is already booked
+                    boolean isBooked = !bookingRepository.findOverlapping(court.getId(), date, start, slotEnd)
+                            .isEmpty();
+
+                    if (!isBooked) {
+                        availableSlots.add(start.toString());
+                    }
+                    start = slotEnd;
+                }
+            }
+
+            if (!availableSlots.isEmpty()) {
+                responses.add(pro.play.court.dto.CourtResponse.builder()
+                        .court(court)
+                        .availableSlots(availableSlots)
+                        .build());
+            }
+        }
+
+        return ResponseEntity.ok(responses);
     }
 }

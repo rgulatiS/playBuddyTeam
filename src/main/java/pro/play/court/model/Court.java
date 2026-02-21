@@ -20,16 +20,18 @@ public class Court extends AuditModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "venue_id")
     private Venue venue;
 
     private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "sport_id")
     private Sport sport;
 
     @Column(name = "price_per_hour")
     private BigDecimal pricePerHour;
+
+    private String imageUrl;
 }
